@@ -1,92 +1,301 @@
-import { theme } from './theme';
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Box,
+  Typography,
+  Tabs,
+  Tab,
+  CircularProgress,
+  Button,
+  Paper,
+} from '@mui/material';
+import {
+  WbSunny,
+  Timeline,
+  History,
+  Map,
+  Refresh,
+} from '@mui/icons-material';
+import WeatherCard from '@/components/WeatherCard';
+import ForecastChart from '@/components/ForecastChart';
+import ForecastList from '@/components/ForecastList';
+import HistoricalChart from '@/components/HistoricalChart';
+import ModelMapsViewer from '@/components/ModelMapsViewer';
+import CitySelector from '@/components/CitySelector';
+import { weatherApi } from '@/services/api';
+import { WeatherData, ForecastDay, HistoricalData, ModelMap } from '@/types/weather';
+import { subDays } from 'date-fns';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
+  return (
+    <div role="tabpanel" hidden={value !== index} {...other}>
+      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
+    </div>
+  );
+}
 
 export default function Home() {
-  return (
-    <main
-      className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: theme.gradients.sky }}
-    >
-      <div className="max-w-4xl w-full text-center">
-        {/* Hero Section */}
-        <div className="mb-12">
-          <h1 className="text-6xl md:text-8xl font-bold text-white mb-4 tracking-tight">
-            Weather
-          </h1>
-          <p className="text-xl md:text-2xl text-blue-100 mb-8 font-light">
-            Discover the beauty of Israel&apos;s skies
-          </p>
-        </div>
+  const [activeTab, setActiveTab] = useState(0);
+  const [selectedCities, setSelectedCities] = useState<string[]>(['tel-aviv']);
+  const [weatherData, setWeatherData] = useState<Record<string, WeatherData>>({});
+  const [forecast, setForecast] = useState<ForecastDay[]>([]);
+  const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
+  const [modelMaps, setModelMaps] = useState<ModelMap[]>([]);
+  const [loading, setLoading] = useState(false);
 
-        {/* Search Section */}
-        <div
-          className="rounded-2xl p-8 shadow-2xl backdrop-blur-md"
-          style={{
-            background: theme.colors.cardBg,
-            border: `1px solid ${theme.colors.cardBorder}`,
+  const loadWeatherData = async () => {
+    setLoading(true);
+    try {
+      const weatherPromises = selectedCities.map((cityId) =>
+        weatherApi.getCurrentWeather(cityId).then((data) => ({ cityId, data }))
+      );
+      const results = await Promise.all(weatherPromises);
+      const newWeatherData: Record<string, WeatherData> = {};
+      results.forEach(({ cityId, data }) => {
+        newWeatherData[cityId] = data;
+      });
+      setWeatherData(newWeatherData);
+    } catch (error) {
+      console.error('Error loading weather data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadForecast = async () => {
+    if (selectedCities.length === 0) return;
+    setLoading(true);
+    try {
+      const data = await weatherApi.getForecast(selectedCities[0], 7);
+      setForecast(data);
+    } catch (error) {
+      console.error('Error loading forecast:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHistoricalData = async () => {
+    if (selectedCities.length === 0) return;
+    setLoading(true);
+    try {
+      const endDate = new Date();
+      const startDate = subDays(endDate, 30);
+      const data = await weatherApi.getHistoricalData(selectedCities[0], startDate, endDate);
+      setHistoricalData(data);
+    } catch (error) {
+      console.error('Error loading historical data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadModelMaps = async () => {
+    setLoading(true);
+    try {
+      const data = await weatherApi.getModelMaps();
+      setModelMaps(data);
+    } catch (error) {
+      console.error('Error loading model maps:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWeatherData();
+  }, [selectedCities]);
+
+  useEffect(() => {
+    if (activeTab === 1) loadForecast();
+    if (activeTab === 2) loadHistoricalData();
+    if (activeTab === 3) loadModelMaps();
+  }, [activeTab, selectedCities]);
+
+  const handleRefresh = () => {
+    if (activeTab === 0) loadWeatherData();
+    if (activeTab === 1) loadForecast();
+    if (activeTab === 2) loadHistoricalData();
+    if (activeTab === 3) loadModelMaps();
+  };
+
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #3b82f6 0%, #1e40af 50%, #1e3a8a 100%)',
+        py: 4,
+      }}
+    >
+      <Container maxWidth="xl">
+        {/* Compact Header */}
+        <Box 
+          display="flex" 
+          justifyContent="space-between" 
+          alignItems="center" 
+          mb={3}
+          flexWrap="wrap"
+          gap={2}
+        >
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <WbSunny sx={{ fontSize: 36, color: 'white' }} />
+            <Box>
+              <Typography variant="h5" fontWeight="bold" color="white">
+                Israel Open Weather
+              </Typography>
+              <Typography variant="caption" color="rgba(255, 255, 255, 0.8)">
+                Weather Data & Forecasts
+              </Typography>
+            </Box>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={<Refresh />}
+            onClick={handleRefresh}
+            disabled={loading}
+            sx={{
+              background: 'rgba(255, 255, 255, 0.9)',
+              color: '#3b82f6',
+              '&:hover': {
+                background: 'white',
+              },
+            }}
+          >
+            Refresh
+          </Button>
+        </Box>
+
+        {/* City Selector */}
+        <Paper
+          sx={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: 3,
+            p: 3,
+            mb: 3,
           }}
         >
-          <h2 className="text-2xl font-semibold text-white mb-6">
-            Check the weather in your city
-          </h2>
-          <div className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto">
-            <input
-              type="text"
-              placeholder="Enter city name..."
-              className="flex-1 px-6 py-3 rounded-xl text-white placeholder-blue-200 border focus:outline-none focus:ring-2 focus:ring-white/50 focus:border-transparent backdrop-blur-sm"
-              style={{
-                background: theme.colors.inputBg,
-                borderColor: theme.colors.cardBorder,
-              }}
-            />
-            <button
-              className="px-8 py-3 rounded-xl font-semibold hover:bg-blue-50 transition-colors duration-200 shadow-lg"
-              style={{
-                background: theme.colors.buttonPrimary,
-                color: theme.colors.buttonPrimaryText,
-              }}
-            >
-              Search
-            </button>
-          </div>
-        </div>
+          <CitySelector
+            selectedCities={selectedCities}
+            onChange={setSelectedCities}
+            multiple={activeTab === 0}
+          />
+        </Paper>
 
-        {/* Features Preview */}
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-white">
-          <div
-            className="rounded-xl p-6 backdrop-blur-md"
-            style={{
-              background: theme.colors.cardBg,
-              border: `1px solid ${theme.colors.cardBorder}`,
+        {/* Tabs */}
+        <Paper
+          sx={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: 3,
+            mb: 3,
+          }}
+        >
+          <Tabs
+            value={activeTab}
+            onChange={(e, newValue) => setActiveTab(newValue)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              '.MuiTab-root': {
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontWeight: 'bold',
+                '&.Mui-selected': {
+                  color: 'white',
+                },
+              },
+              '.MuiTabs-indicator': {
+                backgroundColor: 'white',
+                height: 3,
+              },
             }}
           >
-            <div className="text-4xl mb-4">🌤️</div>
-            <h3 className="text-lg font-semibold mb-2">Current Conditions</h3>
-            <p className="text-blue-100 text-sm">Real-time weather updates</p>
-          </div>
-          <div
-            className="rounded-xl p-6 backdrop-blur-md"
-            style={{
-              background: theme.colors.cardBg,
-              border: `1px solid ${theme.colors.cardBorder}`,
+            <Tab icon={<WbSunny />} label="Current Weather" iconPosition="start" />
+            <Tab icon={<Timeline />} label="7-Day Forecast" iconPosition="start" />
+            <Tab icon={<History />} label="Historical Data" iconPosition="start" />
+            <Tab icon={<Map />} label="Model Maps" iconPosition="start" />
+          </Tabs>
+        </Paper>
+
+        {/* Loading Indicator */}
+        {loading && (
+          <Box display="flex" justifyContent="center" py={4}>
+            <CircularProgress sx={{ color: 'white' }} />
+          </Box>
+        )}
+
+        {/* Tab Panels */}
+        <TabPanel value={activeTab} index={0}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                md: 'repeat(2, 1fr)',
+                lg: 'repeat(3, 1fr)',
+              },
+              gap: 3,
             }}
           >
-            <div className="text-4xl mb-4">📅</div>
-            <h3 className="text-lg font-semibold mb-2">7-Day Forecast</h3>
-            <p className="text-blue-100 text-sm">Plan ahead with accuracy</p>
-          </div>
-          <div
-            className="rounded-xl p-6 backdrop-blur-md"
-            style={{
-              background: theme.colors.cardBg,
-              border: `1px solid ${theme.colors.cardBorder}`,
-            }}
-          >
-            <div className="text-4xl mb-4">🔔</div>
-            <h3 className="text-lg font-semibold mb-2">Weather Alerts</h3>
-            <p className="text-blue-100 text-sm">Stay informed and safe</p>
-          </div>
-        </div>
-      </div>
-    </main>
+            {selectedCities.map((cityId) => (
+              <Box key={cityId}>
+                {weatherData[cityId] && <WeatherCard weather={weatherData[cityId]} />}
+              </Box>
+            ))}
+          </Box>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={1}>
+          <Box mb={3}>
+            <ForecastList forecast={forecast} />
+          </Box>
+          {forecast.length > 0 && <ForecastChart forecast={forecast} />}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={2}>
+          {historicalData.length > 0 && (
+            <HistoricalChart
+              data={historicalData}
+              title={`Historical Weather Data - Last 30 Days`}
+            />
+          )}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={3}>
+          <ModelMapsViewer maps={modelMaps} />
+        </TabPanel>
+
+        {/* Footer */}
+        <Paper
+          sx={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: 3,
+            p: 3,
+            mt: 4,
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="body2" color="white" sx={{ opacity: 0.8 }}>
+            Israel Open Weather - Open Source Weather Platform for Weather Enthusiasts
+          </Typography>
+          <Typography variant="caption" color="white" sx={{ opacity: 0.6 }}>
+            Data includes live weather, forecasts, historical data, and GFS/ECMWF model maps
+          </Typography>
+        </Paper>
+      </Container>
+    </Box>
   );
 }
